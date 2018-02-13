@@ -1,8 +1,9 @@
 {
-  "name": "node-gyp",
-  "description": "Node.js native addon build tool",
+  "name": "nodejs-mobile-gyp",
+  "description": "Node.js for Mobile Apps native addon build tool",
   "license": "MIT",
   "keywords": [
+    "nodejs-mobile",
     "native",
     "addon",
     "module",
@@ -11,12 +12,13 @@
     "bindings",
     "gyp"
   ],
-  "version": "4.0.0",
+  "version": "0.1.0",
   "installVersion": 9,
-  "author": "Nathan Rajlich <nathan@tootallnate.net> (http://tootallnate.net)",
+  "author": "janeasystems",
+  "homepage": "https://code.janeasystems.com/nodejs-mobile",
   "repository": {
     "type": "git",
-    "url": "git://github.com/nodejs/node-gyp.git"
+    "url": "git://github.com/janeasystems/nodejs-mobile-gyp.git"
   },
   "preferGlobal": true,
   "bin": "./bin/node-gyp.js",

@@ -1,5 +1,15 @@
-node-gyp
+nodejs-mobile-gyp
 =========
+
+## Node.js for Mobile Apps native addon build tool
+
+This is a fork of [node-gyp](https://github.com/nodejs/node-gyp) with changes to achieve
+greater compatibility for building native modules for [nodejs-mobile](https://github.com/janeasystems/nodejs-mobile).
+
+***Disclaimer:***  documentation found in this repository is currently unchanged from the parent repository and may only be applicable to `node-gyp`.
+
+The rest of this `README` is from the original `node-gyp` project's `README`.
+
 ## Node.js native addon build tool
 
 `node-gyp` is a cross-platform command-line tool written in Node.js for compiling
