@@ -325,7 +325,7 @@ class XcodeSettings(object):
     if self._IsBundle():
       return {
         'executable': 'com.apple.product-type.application',
-        'loadable_module': 'com.apple.product-type.bundle',
+        'loadable_module': 'com.apple.product-type.framework' if self.isIOS else 'com.apple.product-type.bundle',
         'shared_library': 'com.apple.product-type.framework',
       }[self.spec['type']]
     else:
@@ -345,7 +345,7 @@ class XcodeSettings(object):
       'executable': 'mh_execute',
       'static_library': 'staticlib',
       'shared_library': 'mh_dylib',
-      'loadable_module': 'mh_bundle',
+      'loadable_module': 'mh_dylib' if self.isIOS else 'mh_bundle',
     }[self.spec['type']]
 
   def _GetBundleBinaryPath(self):
@@ -919,7 +919,7 @@ class XcodeSettings(object):
         self._Test('STRIP_INSTALLED_PRODUCT', 'YES', default='NO')):
 
       default_strip_style = 'debugging'
-      if self.spec['type'] == 'loadable_module' and self._IsBundle():
+      if self.spec['type'] == 'loadable_module' and self._IsBundle() and not self.isIOS:
         default_strip_style = 'non-global'
       elif self.spec['type'] == 'executable':
         default_strip_style = 'all'
@@ -1336,7 +1336,7 @@ def IsMacBundle(flavor, spec):
   Bundles are directories with a certain subdirectory structure, instead of
   just a single file. Bundle rules do not produce a binary but also package
   resources into that directory."""
-  is_mac_bundle = (int(spec.get('mac_bundle', 0)) != 0 and flavor == 'mac')
+  is_mac_bundle = (int(spec.get('mac_bundle', 0)) != 0 and flavor in ('mac', 'ios'))
   if is_mac_bundle:
     assert spec['type'] != 'none', (
         'mac_bundle targets cannot have type none (target "%s")' %

@@ -700,6 +700,12 @@ def GenerateOutput(target_list, target_dicts, data, params):
       'mac_kernel_extension+bundle': 'com.apple.product-type.kernel-extension',
     }
 
+    # Bundle binaries are not supported on iOS, so loadable_modules will have to be
+    # dynamic libraries.
+    if (self.flavor == 'ios'):
+      _types['loadable_module'] = 'com.apple.product-type.library.dynamic'
+      _types['loadable_module+bundle'] = 'com.apple.product-type.framework'
+
     target_properties = {
       'buildConfigurationList': xccl,
       'name':                   target_name,

@@ -44,6 +44,11 @@
             '-undefined dynamic_lookup'
           ],
         },
+        'conditions': [
+          [ 'OS=="ios"', {
+            'mac_bundle': 1,
+          }],
+        ],
       }],
 
       ['_type=="static_library"', {

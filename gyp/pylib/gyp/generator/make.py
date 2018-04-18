@@ -1605,7 +1605,8 @@ $(obj).$(TOOLSET)/$(TARGET)/%%.o: $(obj)/%%%s FORCE_DO_CMD
       else:
         self.WriteDoCmd([self.output_binary], link_deps, 'alink', part_of_all,
                         postbuilds=postbuilds)
-    elif self.type == 'shared_library':
+    elif (self.type == 'shared_library' or
+          (self.type=='loadable_module' and self.flavor in ('ios'))):
       self.WriteLn('%s: LD_INPUTS := %s' % (
             QuoteSpaces(self.output_binary),
             ' '.join(map(QuoteSpaces, link_deps))))
