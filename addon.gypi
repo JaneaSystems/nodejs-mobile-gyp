@@ -141,7 +141,7 @@
         ],
       }],
       [ 'OS in "freebsd openbsd netbsd solaris" or \
-         (OS=="linux" and target_arch!="ia32")', {
+         (OS in "linux android" and target_arch!="ia32")', {
         'cflags': [ '-fPIC' ],
       }]
     ]
