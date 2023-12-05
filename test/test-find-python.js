@@ -1,339 +1,175 @@
 'use strict'
 
-var test = require('tape')
-var path = require('path')
-var configure = require('../lib/configure')
-var execFile = require('child_process').execFile
-var PythonFinder = configure.test.PythonFinder
+delete process.env.PYTHON
 
-test('find python', function (t) {
-  t.plan(4)
+const { describe, it } = require('mocha')
+const assert = require('assert')
+const PythonFinder = require('../lib/find-python')
+const { execFile } = require('../lib/util')
+const { poison } = require('./common')
 
-  configure.test.findPython('python', function (err, found) {
-    t.strictEqual(err, null)
-    var proc = execFile(found, ['-V'], function (err, stdout, stderr) {
-      t.strictEqual(err, null)
-      t.strictEqual(stdout, '')
-      t.ok(/Python 2/.test(stderr))
-    })
-    proc.stdout.setEncoding('utf-8')
-    proc.stderr.setEncoding('utf-8')
+class TestPythonFinder extends PythonFinder {
+  constructor (...args) {
+    super(...args)
+    delete this.env.NODE_GYP_FORCE_PYTHON
+  }
+
+  async findPython () {
+    try {
+      return { err: null, python: await super.findPython() }
+    } catch (err) {
+      return { err, python: null }
+    }
+  }
+}
+
+describe('find-python', function () {
+  it('find python', async function () {
+    const found = await PythonFinder.findPython(null)
+    const [err, stdout, stderr] = await execFile(found, ['-V'], { encoding: 'utf-8' })
+    assert.strictEqual(err, null)
+    assert.ok(/Python 3/.test(stdout))
+    assert.strictEqual(stderr, '')
   })
-})
 
-function poison(object, property) {
-  function fail() {
-    throw new Error('Property ' + property + ' should not have been accessed.')
-  }
-  var descriptor = {
-    configurable: true,
-    enumerable: false,
-    writable: true,
-    getter: fail,
-    setter: fail,
-  }
-  Object.defineProperty(object, property, descriptor)
-}
-
-// Work around a v0.10.x CI issue where path.resolve() on UNIX systems prefixes
-// Windows paths with the current working directory.  v0.12 and up are free of
-// this issue because they use path.win32.resolve() which does the right thing.
-var resolve = path.win32 && path.win32.resolve || function() {
-  function rstrip(s) { return s.replace(/\\+$/, '') }
-  return [].slice.call(arguments).map(rstrip).join('\\')
-}
-
-function TestPythonFinder() { PythonFinder.apply(this, arguments) }
-TestPythonFinder.prototype = Object.create(PythonFinder.prototype)
-poison(TestPythonFinder.prototype, 'env')
-poison(TestPythonFinder.prototype, 'execFile')
-poison(TestPythonFinder.prototype, 'resolve')
-poison(TestPythonFinder.prototype, 'stat')
-poison(TestPythonFinder.prototype, 'which')
-poison(TestPythonFinder.prototype, 'win')
-
-test('find python - python', function (t) {
-  t.plan(5)
-
-  var f = new TestPythonFinder('python', done)
-  f.which = function(program, cb) {
-    t.strictEqual(program, 'python')
-    cb(null, program)
-  }
-  f.execFile = function(program, args, opts, cb) {
-    t.strictEqual(program, 'python')
-    t.ok(/import sys/.test(args[1]))
-    cb(null, '2.7.0')
-  }
-  f.checkPython()
-
-  function done(err, python) {
-    t.strictEqual(err, null)
-    t.strictEqual(python, 'python')
-  }
-})
-
-test('find python - python too old', function (t) {
-  t.plan(4)
-
-  var f = new TestPythonFinder('python', done)
-  f.which = function(program, cb) {
-    t.strictEqual(program, 'python')
-    cb(null, program)
-  }
-  f.execFile = function(program, args, opts, cb) {
-    t.strictEqual(program, 'python')
-    t.ok(/import sys/.test(args[1]))
-    cb(null, '2.3.4')
-  }
-  f.checkPython()
-
-  function done(err) {
-    t.ok(/is not supported by gyp/.test(err))
-  }
-})
-
-test('find python - python too new', function (t) {
-  t.plan(4)
-
-  var f = new TestPythonFinder('python', done)
-  f.which = function(program, cb) {
-    t.strictEqual(program, 'python')
-    cb(null, program)
-  }
-  f.execFile = function(program, args, opts, cb) {
-    t.strictEqual(program, 'python')
-    t.ok(/import sys/.test(args[1]))
-    cb(null, '3.0.0')
-  }
-  f.checkPython()
-
-  function done(err) {
-    t.ok(/is not supported by gyp/.test(err))
-  }
-})
-
-test('find python - no python', function (t) {
-  t.plan(2)
-
-  var f = new TestPythonFinder('python', done)
-  f.which = function(program, cb) {
-    t.strictEqual(program, 'python')
-    cb(new Error('not found'))
-  }
-  f.checkPython()
-
-  function done(err) {
-    t.ok(/Can't find Python executable/.test(err))
-  }
-})
-
-test('find python - no python2', function (t) {
-  t.plan(6)
-
-  var f = new TestPythonFinder('python2', done)
-  f.which = function(program, cb) {
-    f.which = function(program, cb) {
-      t.strictEqual(program, 'python')
-      cb(null, program)
-    }
-    t.strictEqual(program, 'python2')
-    cb(new Error('not found'))
-  }
-  f.execFile = function(program, args, opts, cb) {
-    t.strictEqual(program, 'python')
-    t.ok(/import sys/.test(args[1]))
-    cb(null, '2.7.0')
-  }
-  f.checkPython()
-
-  function done(err, python) {
-    t.strictEqual(err, null)
-    t.strictEqual(python, 'python')
-  }
-})
-
-test('find python - no python2, no python, unix', function (t) {
-  t.plan(3)
-
-  var f = new TestPythonFinder('python2', done)
-  poison(f, 'checkPythonLauncher')
-  f.win = false
-
-  f.which = function(program, cb) {
-    f.which = function(program, cb) {
-      t.strictEqual(program, 'python')
-      cb(new Error('not found'))
-    }
-    t.strictEqual(program, 'python2')
-    cb(new Error('not found'))
-  }
-  f.checkPython()
-
-  function done(err) {
-    t.ok(/Can't find Python executable/.test(err))
-  }
-})
-
-test('find python - no python, use python launcher', function (t) {
-  t.plan(8)
-
-  var f = new TestPythonFinder('python', done)
-  f.env = {}
-  f.win = true
-
-  f.which = function(program, cb) {
-    t.strictEqual(program, 'python')
-    cb(new Error('not found'))
-  }
-  f.execFile = function(program, args, opts, cb) {
-    f.execFile = function(program, args, opts, cb) {
-      t.strictEqual(program, 'Z:\\snake.exe')
-      t.ok(/import sys/.test(args[1]))
-      cb(null, '2.7.0')
-    }
-    t.strictEqual(program, 'py.exe')
-    t.notEqual(args.indexOf('-2'), -1)
-    t.notEqual(args.indexOf('-c'), -1)
-    cb(null, 'Z:\\snake.exe')
-  }
-  f.checkPython()
-
-  function done(err, python) {
-    t.strictEqual(err, null)
-    t.strictEqual(python, 'Z:\\snake.exe')
-  }
-})
-
-test('find python - python 3, use python launcher', function (t) {
-  t.plan(10)
-
-  var f = new TestPythonFinder('python', done)
-  f.env = {}
-  f.win = true
-
-  f.which = function(program, cb) {
-    t.strictEqual(program, 'python')
-    cb(null, program)
-  }
-  f.execFile = function(program, args, opts, cb) {
-    f.execFile = function(program, args, opts, cb) {
-      f.execFile = function(program, args, opts, cb) {
-        t.strictEqual(program, 'Z:\\snake.exe')
-        t.ok(/import sys/.test(args[1]))
-        cb(null, '2.7.0')
+  it('find python - python', async function () {
+    const f = new TestPythonFinder('python')
+    f.execFile = async function (program, args, opts) {
+      f.execFile = async function (program, args, opts) {
+        poison(f, 'execFile')
+        assert.strictEqual(program, '/path/python')
+        assert.ok(/sys\.version_info/.test(args[1]))
+        return [null, '3.9.1']
       }
-      t.strictEqual(program, 'py.exe')
-      t.notEqual(args.indexOf('-2'), -1)
-      t.notEqual(args.indexOf('-c'), -1)
-      cb(null, 'Z:\\snake.exe')
+      assert.strictEqual(program, process.platform === 'win32' ? '"python"' : 'python')
+      assert.ok(/sys\.executable/.test(args[1]))
+      return [null, '/path/python']
     }
-    t.strictEqual(program, 'python')
-    t.ok(/import sys/.test(args[1]))
-    cb(null, '3.0.0')
-  }
-  f.checkPython()
 
-  function done(err, python) {
-    t.strictEqual(err, null)
-    t.strictEqual(python, 'Z:\\snake.exe')
-  }
-})
+    const { err, python } = await f.findPython()
+    assert.strictEqual(err, null)
+    assert.strictEqual(python, '/path/python')
+  })
 
-test('find python - python 3, use python launcher, python 2 too old',
-     function (t) {
-  t.plan(9)
-
-  var f = new TestPythonFinder('python', done)
-  f.checkedPythonLauncher = false
-  f.env = {}
-  f.win = true
-
-  f.which = function(program, cb) {
-    t.strictEqual(program, 'python')
-    cb(null, program)
-  }
-  f.execFile = function(program, args, opts, cb) {
-    f.execFile = function(program, args, opts, cb) {
-      f.execFile = function(program, args, opts, cb) {
-        t.strictEqual(program, 'Z:\\snake.exe')
-        t.ok(/import sys/.test(args[1]))
-        cb(null, '2.3.4')
+  it('find python - python too old', async function () {
+    const f = new TestPythonFinder(null)
+    f.execFile = async function (program, args, opts) {
+      if (/sys\.executable/.test(args[args.length - 1])) {
+        return [null, '/path/python']
+      } else if (/sys\.version_info/.test(args[args.length - 1])) {
+        return [null, '2.3.4']
+      } else {
+        assert.fail()
       }
-      t.strictEqual(program, 'py.exe')
-      t.notEqual(args.indexOf('-2'), -1)
-      t.notEqual(args.indexOf('-c'), -1)
-      cb(null, 'Z:\\snake.exe')
     }
-    t.strictEqual(program, 'python')
-    t.ok(/import sys/.test(args[1]))
-    cb(null, '3.0.0')
-  }
-  f.checkPython()
 
-  function done(err) {
-    t.ok(/is not supported by gyp/.test(err))
-  }
-})
+    const { err } = await f.findPython()
+    assert.ok(/Could not find any Python/.test(err))
+    assert.ok(/not supported/i.test(f.errorLog))
+  })
 
-test('find python - no python, no python launcher, good guess', function (t) {
-  t.plan(6)
-
-  var re = /C:[\\\/]Python27[\\\/]python[.]exe/
-  var f = new TestPythonFinder('python', done)
-  f.env = {}
-  f.win = true
-
-  f.which = function(program, cb) {
-    t.strictEqual(program, 'python')
-    cb(new Error('not found'))
-  }
-  f.execFile = function(program, args, opts, cb) {
-    f.execFile = function(program, args, opts, cb) {
-      t.ok(re.test(program))
-      t.ok(/import sys/.test(args[1]))
-      cb(null, '2.7.0')
+  it('find python - no python', async function () {
+    const f = new TestPythonFinder(null)
+    f.execFile = async function (program, args, opts) {
+      if (/sys\.executable/.test(args[args.length - 1])) {
+        throw new Error('not found')
+      } else if (/sys\.version_info/.test(args[args.length - 1])) {
+        throw new Error('not a Python executable')
+      } else {
+        assert.fail()
+      }
     }
-    t.strictEqual(program, 'py.exe')
-    cb(new Error('not found'))
-  }
-  f.resolve = resolve
-  f.stat = function(path, cb) {
-    t.ok(re.test(path))
-    cb(null, {})
-  }
-  f.checkPython()
 
-  function done(err, python) {
-    t.ok(re.test(python))
-  }
-})
+    const { err } = await f.findPython()
+    assert.ok(/Could not find any Python/.test(err))
+    assert.ok(/not in PATH/.test(f.errorLog))
+  })
 
-test('find python - no python, no python launcher, bad guess', function (t) {
-  t.plan(4)
+  it('find python - no python2, no python, unix', async function () {
+    const f = new TestPythonFinder(null)
+    f.checkPyLauncher = assert.fail
+    f.win = false
 
-  var f = new TestPythonFinder('python', done)
-  f.env = { SystemDrive: 'Z:\\' }
-  f.win = true
+    f.execFile = async function (program, args, opts) {
+      if (/sys\.executable/.test(args[args.length - 1])) {
+        throw new Error('not found')
+      } else {
+        assert.fail()
+      }
+    }
 
-  f.which = function(program, cb) {
-    t.strictEqual(program, 'python')
-    cb(new Error('not found'))
-  }
-  f.execFile = function(program, args, opts, cb) {
-    t.strictEqual(program, 'py.exe')
-    cb(new Error('not found'))
-  }
-  f.resolve = resolve
-  f.stat = function(path, cb) {
-    t.ok(/Z:[\\\/]Python27[\\\/]python.exe/.test(path))
-    var err = new Error('not found')
-    err.code = 'ENOENT'
-    cb(err)
-  }
-  f.checkPython()
+    const { err } = await f.findPython()
+    assert.ok(/Could not find any Python/.test(err))
+    assert.ok(/not in PATH/.test(f.errorLog))
+  })
 
-  function done(err) {
-    t.ok(/Can't find Python executable/.test(err))
-  }
+  it('find python - no python, use python launcher', async function () {
+    const f = new TestPythonFinder(null)
+    f.win = true
+
+    f.execFile = async function (program, args, opts) {
+      if (program === 'py.exe') {
+        assert.notStrictEqual(args.indexOf('-3'), -1)
+        assert.notStrictEqual(args.indexOf('-c'), -1)
+        return [null, 'Z:\\snake.exe']
+      }
+      if (/sys\.executable/.test(args[args.length - 1])) {
+        throw new Error('not found')
+      } else if (f.winDefaultLocations.includes(program)) {
+        throw new Error('not found')
+      } else if (/sys\.version_info/.test(args[args.length - 1])) {
+        if (program === 'Z:\\snake.exe') {
+          return [null, '3.9.0']
+        } else {
+          assert.fail()
+        }
+      } else {
+        assert.fail()
+      }
+    }
+    const { err, python } = await f.findPython()
+    assert.strictEqual(err, null)
+    assert.strictEqual(python, 'Z:\\snake.exe')
+  })
+
+  it('find python - no python, no python launcher, good guess', async function () {
+    const f = new TestPythonFinder(null)
+    f.win = true
+    const expectedProgram = f.winDefaultLocations[0]
+
+    f.execFile = async function (program, args, opts) {
+      if (program === 'py.exe') {
+        throw new Error('not found')
+      }
+      if (/sys\.executable/.test(args[args.length - 1])) {
+        throw new Error('not found')
+      } else if (program === expectedProgram &&
+                 /sys\.version_info/.test(args[args.length - 1])) {
+        return [null, '3.7.3']
+      } else {
+        assert.fail()
+      }
+    }
+    const { err, python } = await f.findPython()
+    assert.strictEqual(err, null)
+    assert.ok(python === expectedProgram)
+  })
+
+  it('find python - no python, no python launcher, bad guess', async function () {
+    const f = new TestPythonFinder(null)
+    f.win = true
+
+    f.execFile = async function (program, args, opts) {
+      if (/sys\.executable/.test(args[args.length - 1])) {
+        throw new Error('not found')
+      } else if (/sys\.version_info/.test(args[args.length - 1])) {
+        throw new Error('not a Python executable')
+      } else {
+        assert.fail()
+      }
+    }
+    const { err } = await f.findPython()
+    assert.ok(/Could not find any Python/.test(err))
+    assert.ok(/not in PATH/.test(f.errorLog))
+  })
 })

@@ -1,6 +1,5 @@
 nodejs-mobile-gyp
 =======
-
 ## Node.js for Mobile Apps native addon build tool
 
 This is a fork of [node-gyp](https://github.com/nodejs/node-gyp) with changes to achieve
@@ -14,10 +13,16 @@ The rest of this `README` is from the original `node-gyp` project's `README`.
 =======
 # `node-gyp` - Node.js native addon build tool
 
-`node-gyp` is a cross-platform command-line tool written in Node.js for compiling
-native addon modules for Node.js. It bundles the [gyp](https://gyp.gsrc.io)
-project used by the Chromium team and takes away the pain of dealing with the
-various differences in build platforms.
+[![Build Status](https://github.com/nodejs/node-gyp/workflows/Tests/badge.svg?branch=main)](https://github.com/nodejs/node-gyp/actions?query=workflow%3ATests+branch%3Amain)
+![npm](https://img.shields.io/npm/dm/node-gyp)
+
+`node-gyp` is a cross-platform command-line tool written in Node.js for
+compiling native addon modules for Node.js. It contains a vendored copy of the
+[gyp-next](https://github.com/nodejs/gyp-next) project that was previously used
+by the Chromium team and extended to support the development of Node.js native
+addons.
+
+Note that `node-gyp` is _not_ used to build Node.js itself.
 
 Multiple target versions of Node.js are supported (i.e. `0.8`, ..., `4`, `5`, `6`,
 etc.), regardless of what version of Node.js is actually installed on your system
@@ -25,84 +30,116 @@ etc.), regardless of what version of Node.js is actually installed on your syste
 
 ## Features
 
- * Easy to use, consistent interface
- * Same commands to build your module on every platform
- * Supports multiple target versions of Node.js
+ * The same build commands work on any of the supported platforms
+ * Supports the targeting of different versions of Node.js
 
 ## Installation
 
-You can install with `npm`:
+You can install `node-gyp` using `npm`:
 
 ``` bash
-$ npm install -g node-gyp
+npm install -g node-gyp
 ```
 
-You will also need to install:
+Depending on your operating system, you will need to install:
 
 ### On Unix
 
-   * `python` (`v2.7` recommended, `v3.x.x` is __*not*__ supported)
+   * [A supported version of Python](https://devguide.python.org/versions/)
    * `make`
    * A proper C/C++ compiler toolchain, like [GCC](https://gcc.gnu.org)
 
 ### On macOS
 
-   * `python` (`v2.7` recommended, `v3.x.x` is __*not*__ supported) (already installed on macOS)
-   * [Xcode](https://developer.apple.com/xcode/download/)
-     * You also need to install the `Command Line Tools` via Xcode. You can find this under the menu `Xcode -> Preferences -> Locations` (or by running `xcode-select --install` in your Terminal)
-       * This step will install `gcc` and the related toolchain containing `make`
+   * [A supported version of Python](https://devguide.python.org/versions/)
+   * `Xcode Command Line Tools` which will install `clang`, `clang++`, and `make`.
+     * Install the `Xcode Command Line Tools` standalone by running `xcode-select --install`. -- OR --
+     * Alternatively, if you already have the [full Xcode installed](https://developer.apple.com/xcode/download/), you can install the Command Line Tools under the menu `Xcode -> Open Developer Tool -> More Developer Tools...`.
+
 
 ### On Windows
 
-#### Option 1
-
-Install all the required tools and configurations using Microsoft's [windows-build-tools](https://github.com/felixrieseberg/windows-build-tools) using `npm install --global --production windows-build-tools` from an elevated PowerShell or CMD.exe (run as Administrator).
-
-#### Option 2
+Install the current [version of Python](https://devguide.python.org/versions/) from the
+[Microsoft Store](https://apps.microsoft.com/store/search?publisher=Python+Software+Foundation).
 
 Install tools and configuration manually:
    * Install Visual C++ Build Environment: [Visual Studio Build Tools](https://visualstudio.microsoft.com/thank-you-downloading-visual-studio/?sku=BuildTools)
-   (using "Visual C++ build tools" workload) or [Visual Studio 2017 Community](https://visualstudio.microsoft.com/pl/thank-you-downloading-visual-studio/?sku=Community)
+   (using "Visual C++ build tools" if using a version older than VS2019, otherwise use "Desktop development with C++" workload) or [Visual Studio Community](https://visualstudio.microsoft.com/thank-you-downloading-visual-studio/?sku=Community)
    (using the "Desktop development with C++" workload)
-   * Install [Python 2.7](https://www.python.org/downloads/) (`v3.x.x` is not supported), and run `npm config set python python2.7` (or see below for further instructions on specifying the proper Python version and path.)
-   * Launch cmd, `npm config set msvs_version 2017`
 
    If the above steps didn't work for you, please visit [Microsoft's Node.js Guidelines for Windows](https://github.com/Microsoft/nodejs-guidelines/blob/master/windows-environment.md#compiling-native-addon-modules) for additional tips.
 
-If you have multiple Python versions installed, you can identify which Python
-version `node-gyp` uses by setting the '--python' variable:
+   To target native ARM64 Node.js on Windows on ARM, add the components "Visual C++ compilers and libraries for ARM64" and "Visual C++ ATL for ARM64".
+
+   To use the native ARM64 C++ compiler on Windows on ARM, ensure that you have Visual Studio 2022 [17.4 or later](https://devblogs.microsoft.com/visualstudio/arm64-visual-studio-is-officially-here/) installed.
+
+### Configuring Python Dependency
+
+`node-gyp` requires that you have installed a [supported version of Python](https://devguide.python.org/versions/).
+If you have multiple versions of Python installed, you can identify which version
+`node-gyp` should use in one of the following ways:
+
+1. by setting the `--python` command-line option, e.g.:
 
 ``` bash
-$ node-gyp --python /path/to/python2.7
+node-gyp <command> --python /path/to/executable/python
 ```
 
-If `node-gyp` is called by way of `npm`, *and* you have multiple versions of
-Python installed, then you can set `npm`'s 'python' config key to the appropriate
-value:
-
+2. If `node-gyp` is called by way of `npm`, *and* you have multiple versions of
+Python installed, then you can set the `npm_config_python` environment variable
+to the appropriate path:
 ``` bash
-$ npm config set python /path/to/executable/python2.7
+export npm_config_python=/path/to/executable/python
 ```
+&nbsp;&nbsp;&nbsp;&nbsp;Or on Windows:
+```console
+py --list-paths  # To see the installed Python versions
+set npm_config_python=C:\path\to\python.exe
+```
+
+3. If the `PYTHON` environment variable is set to the path of a Python executable,
+then that version will be used if it is a supported version.
+
+4. If the `NODE_GYP_FORCE_PYTHON` environment variable is set to the path of a
+Python executable, it will be used instead of any of the other configured or
+built-in Python search paths. If it's not a compatible version, no further
+searching will be done.
+
+### Build for Third Party Node.js Runtimes
+
+When building modules for third-party Node.js runtimes like Electron, which have
+different build configurations from the official Node.js distribution, you
+should use `--dist-url` or `--nodedir` flags to specify the headers of the
+runtime to build for.
+
+Also when `--dist-url` or `--nodedir` flags are passed, node-gyp will use the
+`config.gypi` shipped in the headers distribution to generate build
+configurations, which is different from the default mode that would use the
+`process.config` object of the running Node.js instance.
+
+Some old versions of Electron shipped malformed `config.gypi` in their headers
+distributions, and you might need to pass `--force-process-config` to node-gyp
+to work around configuration errors.
 
 ## How to Use
 
-To compile your native addon, first go to its root directory:
+To compile your native addon first go to its root directory:
 
 ``` bash
-$ cd my_node_addon
+cd my_node_addon
 ```
 
 The next step is to generate the appropriate project build files for the current
 platform. Use `configure` for that:
 
 ``` bash
-$ node-gyp configure
+node-gyp configure
 ```
 
 Auto-detection fails for Visual C++ Build Tools 2015, so `--msvs_version=2015`
 needs to be added (not needed when run by npm as configured above):
 ``` bash
-$ node-gyp configure --msvs_version=2015
+node-gyp configure --msvs_version=2015
 ```
 
 __Note__: The `configure` step looks for a `binding.gyp` file in the current
@@ -112,7 +149,7 @@ Now you will have either a `Makefile` (on Unix platforms) or a `vcxproj` file
 (on Windows) in the `build/` directory. Next, invoke the `build` command:
 
 ``` bash
-$ node-gyp build
+node-gyp build
 ```
 
 Now you have your compiled `.node` bindings file! The compiled bindings end up
@@ -130,7 +167,7 @@ JSON-like format. This file gets placed in the root of your package, alongside
 
 A barebones `gyp` file appropriate for building a Node.js addon could look like:
 
-``` python
+```python
 {
   "targets": [
     {
@@ -141,14 +178,17 @@ A barebones `gyp` file appropriate for building a Node.js addon could look like:
 }
 ```
 
-Some additional resources for addons and writing `gyp` files:
+## Further reading
+
+The **[docs](./docs/)** directory contains additional documentation on specific node-gyp topics that may be useful if you are experiencing problems installing or building addons using node-gyp.
+
+Some additional resources for Node.js native addons and writing `gyp` configuration files:
 
  * ["Going Native" a nodeschool.io tutorial](http://nodeschool.io/#goingnative)
- * ["Hello World" node addon example](https://github.com/nodejs/node/tree/master/test/addons/hello-world)
+ * ["Hello World" node addon example](https://github.com/nodejs/node/tree/main/test/addons/hello-world)
  * [gyp user documentation](https://gyp.gsrc.io/docs/UserDocumentation.md)
  * [gyp input format reference](https://gyp.gsrc.io/docs/InputFormatReference.md)
- * [*"binding.gyp" files out in the wild* wiki page](https://github.com/nodejs/node-gyp/wiki/%22binding.gyp%22-files-out-in-the-wild)
-
+ * [*"binding.gyp" files out in the wild* wiki page](./docs/binding.gyp-files-in-the-wild.md)
 
 ## Commands
 
@@ -172,7 +212,7 @@ Some additional resources for addons and writing `gyp` files:
 
 | **Command**                       | **Description**
 |:----------------------------------|:------------------------------------------
-| `-j n`, `--jobs n`                | Run `make` in parallel
+| `-j n`, `--jobs n`                | Run `make` in parallel. The value `max` will use all available CPU cores
 | `--target=v6.2.1`                 | Node.js version to build for (default is `process.version`)
 | `--silly`, `--loglevel=silly`     | Log all progress to console
 | `--verbose`, `--loglevel=verbose` | Log most progress to console
@@ -184,15 +224,17 @@ Some additional resources for addons and writing `gyp` files:
 | `--thin=yes`                      | Enable thin static libraries
 | `--arch=$arch`                    | Set target architecture (e.g. ia32)
 | `--tarball=$path`                 | Get headers from a local tarball
-| `--devdir=$path`                  | SDK download directory (default is `~/.node-gyp`)
+| `--devdir=$path`                  | SDK download directory (default is OS cache directory)
 | `--ensure`                        | Don't reinstall headers if already present
 | `--dist-url=$url`                 | Download header tarball from custom URL
-| `--proxy=$url`                    | Set HTTP proxy for downloading header tarball
+| `--proxy=$url`                    | Set HTTP(S) proxy for downloading header tarball
+| `--noproxy=$urls`                 | Set urls to ignore proxies when downloading header tarball
 | `--cafile=$cafile`                | Override default CA chain (to download tarball)
 | `--nodedir=$path`                 | Set the path to the node source code
-| `--python=$path`                  | Set path to the Python 2 binary
+| `--python=$path`                  | Set path to the Python binary
 | `--msvs_version=$version`         | Set Visual Studio version (Windows only)
 | `--solution=$solution`            | Set Visual Studio Solution version (Windows only)
+| `--force-process-config`          | Force using runtime's `process.config` object to generate `config.gypi` file
 
 ## Configuration
 
@@ -206,23 +248,23 @@ For example, to set `devdir` equal to `/tmp/.gyp`, you would:
 Run this on Unix:
 
 ```bash
-$ export npm_config_devdir=/tmp/.gyp
+export npm_config_devdir=/tmp/.gyp
 ```
 
 Or this on Windows:
 
 ```console
-> set npm_config_devdir=c:\temp\.gyp
+set npm_config_devdir=c:\temp\.gyp
 ```
 
-### `npm` configuration
+### `npm` configuration for npm versions before v9
 
 Use the form `OPTION_NAME` for any of the command options listed above.
 
 For example, to set `devdir` equal to `/tmp/.gyp`, you would run:
 
 ```bash
-$ npm config set [--global] devdir /tmp/.gyp
+npm config set [--global] devdir /tmp/.gyp
 ```
 
 **Note:** Configuration set via `npm` will only be used when `node-gyp`

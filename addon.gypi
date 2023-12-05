@@ -1,6 +1,8 @@
 {
   'variables' : {
     'node_engine_include_dir%': 'deps/v8/include',
+    'node_host_binary%': 'node',
+    'node_with_ltcg%': 'true',
   },
   'target_defaults': {
     'type': 'loadable_module',
@@ -60,6 +62,14 @@
         'standalone_static_library': '<(standalone_static_library)'
       }],
 
+      ['_type!="executable"', {
+        'conditions': [
+          [ 'OS=="android"', {
+            'cflags!': [ '-fPIE' ],
+          }]
+        ]
+      }],
+
       ['_win_delay_load_hook=="true"', {
         # If the addon specifies `'win_delay_load_hook': 'true'` in its
         # binding.gyp, link a delay-load hook into the DLL. This hook ensures
@@ -67,12 +77,13 @@
         # is named node.exe, iojs.exe, or something else.
         'conditions': [
           [ 'OS=="win"', {
+            'defines': [ 'HOST_BINARY=\"<(node_host_binary)<(EXECUTABLE_SUFFIX)\"', ],
             'sources': [
               '<(node_gyp_dir)/src/win_delay_load_hook.cc',
             ],
             'msvs_settings': {
               'VCLinkerTool': {
-                'DelayLoadDLLs': [ 'iojs.exe', 'node.exe' ],
+                'DelayLoadDLLs': [ '<(node_host_binary)<(EXECUTABLE_SUFFIX)' ],
                 # Don't print a linker warning when no imports from either .exe
                 # are used.
                 'AdditionalOptions': [ '/ignore:4199' ],
@@ -97,15 +108,41 @@
           '-Wl,-bimport:<(node_exp_file)'
         ],
       }],
-      [ 'OS=="zos"', {
-        'cflags': [
-          '-q64',
-          '-Wc,DLL',
-          '-qlonglong'
-        ],
+      [ 'OS=="os400"', {
         'ldflags': [
-          '-q64',
-          '<(node_exp_file)'
+          '-Wl,-bimport:<(node_exp_file)'
+        ],
+      }],
+      [ 'OS=="zos"', {
+        'conditions': [
+          [ '"<!(echo $CC)" != "clang" and \
+             "<!(echo $CC)" != "ibm-clang64" and \
+             "<!(echo $CC)" != "ibm-clang"', {
+            'cflags': [
+              '-q64',
+              '-Wc,DLL',
+              '-qlonglong',
+              '-qenum=int',
+              '-qxclang=-fexec-charset=ISO8859-1'
+            ],
+            'ldflags': [
+              '-q64',
+              '<(node_exp_file)',
+            ],
+          }, {
+            'cflags': [
+              '-m64',
+            ],
+            'ldflags': [
+              '-m64',
+              '<(node_exp_file)',
+            ],
+          }],
+        ],
+        'defines': [
+          '_ALL_SOURCE',
+          'MAP_FAILED=-1',
+          '_UNIX03_SOURCE',
         ],
       }],
       [ 'OS=="win"', {
@@ -114,6 +151,26 @@
             'library_dirs': [ '<(node_root_dir)/$(ConfigurationName)' ],
             'libraries': [ '<@(node_engine_libs)' ],
           }],
+          ['node_with_ltcg=="true"', {
+            'msvs_settings': {
+              'VCCLCompilerTool': {
+                'WholeProgramOptimization': 'true' # /GL, whole program optimization, needed for LTCG
+              },
+              'VCLibrarianTool': {
+                'AdditionalOptions': [
+                  '/LTCG:INCREMENTAL', # incremental link-time code generation
+                ]
+              },
+              'VCLinkerTool': {
+                'OptimizeReferences': 2, # /OPT:REF
+                'EnableCOMDATFolding': 2, # /OPT:ICF
+                'LinkIncremental': 1, # disable incremental linking
+                'AdditionalOptions': [
+                  '/LTCG:INCREMENTAL', # incremental link-time code generation
+                ]
+              }
+            }
+          }]
         ],
         'libraries': [
           '-lkernel32.lib',
@@ -146,7 +203,7 @@
       [ 'OS in "freebsd openbsd netbsd solaris" or \
          (OS in "linux android" and target_arch!="ia32")', {
         'cflags': [ '-fPIC' ],
-      }]
+      }],
     ]
   }
 }

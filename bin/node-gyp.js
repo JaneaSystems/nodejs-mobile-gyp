@@ -1,38 +1,40 @@
 #!/usr/bin/env node
 
+'use strict'
+
 process.title = 'node-gyp'
 
-var gyp = require('../')
-var log = require('npmlog')
-var osenv = require('osenv')
-var path = require('path')
+const envPaths = require('env-paths')
+const gyp = require('../')
+const log = require('../lib/log')
+const os = require('os')
 
 /**
  * Process and execute the selected commands.
  */
 
-var prog = gyp()
-var completed = false
+const prog = gyp()
+let completed = false
 prog.parseArgv(process.argv)
 prog.devDir = prog.opts.devdir
 
-var homeDir = osenv.home()
+const homeDir = os.homedir()
 if (prog.devDir) {
   prog.devDir = prog.devDir.replace(/^~/, homeDir)
 } else if (homeDir) {
-  prog.devDir = path.resolve(homeDir, '.node-gyp')
+  prog.devDir = envPaths('node-gyp', { suffix: '' }).cache
 } else {
   throw new Error(
     "node-gyp requires that the user's home directory is specified " +
-    "in either of the environmental variables HOME or USERPROFILE. " +
-    "Overide with: --devdir /path/to/.node-gyp")
+    'in either of the environmental variables HOME or USERPROFILE. ' +
+    'Overide with: --devdir /path/to/.node-gyp')
 }
 
 if (prog.todo.length === 0) {
   if (~process.argv.indexOf('-v') || ~process.argv.indexOf('--version')) {
-    console.log('v%s', prog.version)
+    log.stdout('v%s', prog.version)
   } else {
-    console.log('%s', prog.usage())
+    log.stdout('%s', prog.usage())
   }
   process.exit(0)
 }
@@ -42,16 +44,15 @@ log.verbose('cli', process.argv)
 log.info('using', 'node-gyp@%s', prog.version)
 log.info('using', 'node@%s | %s | %s', process.versions.node, process.platform, process.arch)
 
-
 /**
  * Change dir if -C/--directory was passed.
  */
 
-var dir = prog.opts.directory
+const dir = prog.opts.directory
 if (dir) {
-  var fs = require('fs')
+  const fs = require('fs')
   try {
-    var stat = fs.statSync(dir)
+    const stat = fs.statSync(dir)
     if (stat.isDirectory()) {
       log.info('chdir', dir)
       process.chdir(dir)
@@ -67,8 +68,8 @@ if (dir) {
   }
 }
 
-function run () {
-  var command = prog.todo.shift()
+async function run () {
+  const command = prog.todo.shift()
   if (!command) {
     // done!
     completed = true
@@ -76,30 +77,28 @@ function run () {
     return
   }
 
-  prog.commands[command.name](command.args, function (err) {
-    if (err) {
-      log.error(command.name + ' error')
-      log.error('stack', err.stack)
-      errorMessage()
-      log.error('not ok')
-      return process.exit(1)
-    }
-    if (command.name == 'list') {
-      var versions = arguments[1]
-      if (versions.length > 0) {
-        versions.forEach(function (version) {
-          console.log(version)
-        })
+  try {
+    const args = await prog.commands[command.name](command.args) ?? []
+
+    if (command.name === 'list') {
+      if (args.length) {
+        args.forEach((version) => log.stdout(version))
       } else {
-        console.log('No node development files installed. Use `node-gyp install` to install a version.')
+        log.stdout('No node development files installed. Use `node-gyp install` to install a version.')
       }
-    } else if (arguments.length >= 2) {
-      console.log.apply(console, [].slice.call(arguments, 1))
+    } else if (args.length >= 1) {
+      log.stdout(...args.slice(1))
     }
 
     // now run the next command in the queue
-    process.nextTick(run)
-  })
+    return run()
+  } catch (err) {
+    log.error(command.name + ' error')
+    log.error('stack', err.stack)
+    errorMessage()
+    log.error('not ok')
+    return process.exit(1)
+  }
 }
 
 process.on('exit', function (code) {
@@ -119,10 +118,10 @@ process.on('uncaughtException', function (err) {
 
 function errorMessage () {
   // copied from npm's lib/utils/error-handler.js
-  var os = require('os')
+  const os = require('os')
   log.error('System', os.type() + ' ' + os.release())
   log.error('command', process.argv
-            .map(JSON.stringify).join(' '))
+    .map(JSON.stringify).join(' '))
   log.error('cwd', process.cwd())
   log.error('node -v', process.version)
   log.error('node-gyp -v', 'v' + prog.package.version)
@@ -130,10 +129,9 @@ function errorMessage () {
 
 function issueMessage () {
   errorMessage()
-  log.error('', [ 'This is a bug in `node-gyp`.'
-                , 'Try to update node-gyp and file an Issue if it does not help:'
-                , '    <https://github.com/nodejs/node-gyp/issues>'
-                ].join('\n'))
+  log.error('', ['Node-gyp failed to build your package.',
+    'Try to update npm and/or node-gyp and if it does not help file an issue with the package author.'
+  ].join('\n'))
 }
 
 // start running the given commands!

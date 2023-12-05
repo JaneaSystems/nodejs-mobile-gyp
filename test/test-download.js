@@ -1,102 +1,201 @@
 'use strict'
 
-var fs = require('fs')
-var http = require('http')
-var https = require('https')
-var test = require('tape')
-var install = require('../lib/install')
+const { describe, it, after } = require('mocha')
+const assert = require('assert')
+const fs = require('fs/promises')
+const path = require('path')
+const http = require('http')
+const https = require('https')
+const install = require('../lib/install')
+const { download, readCAFile } = require('../lib/download')
+const { FULL_TEST, devDir, platformTimeout } = require('./common')
+const gyp = require('../lib/node-gyp')
+const certs = require('./fixtures/certs')
 
-test('download over http', function (t) {
-  t.plan(2)
+describe('download', function () {
+  it('download over http', async function () {
+    const server = http.createServer((req, res) => {
+      assert.strictEqual(req.headers['user-agent'], `node-gyp v42 (node ${process.version})`)
+      res.end('ok')
+    })
 
-  var server = http.createServer(function (req, res) {
-    t.strictEqual(req.headers['user-agent'],
-                  'node-gyp v42 (node ' + process.version + ')')
-    res.end('ok')
-    server.close()
-  })
+    after(() => new Promise((resolve) => server.close(resolve)))
 
-  var host = '127.0.0.1'
-  server.listen(0, host, function () {
-    var port = this.address().port
-    var gyp = {
+    const host = 'localhost'
+    await new Promise((resolve) => server.listen(0, host, resolve))
+    const { port } = server.address()
+    const gyp = {
       opts: {},
-      version: '42',
+      version: '42'
     }
-    var url = 'http://' + host + ':' + port
-    var req = install.test.download(gyp, {}, url)
-    req.on('response', function (res) {
-      var body = ''
-      res.setEncoding('utf8')
-      res.on('data', function(data) {
-        body += data
-      })
-      res.on('end', function() {
-        t.strictEqual(body, 'ok')
-      })
+    const url = `http://${host}:${port}`
+    const res = await download(gyp, url)
+    assert.strictEqual(await res.text(), 'ok')
+  })
+
+  it('download over https with custom ca', async function () {
+    const cafile = path.join(__dirname, 'fixtures/ca.crt')
+    const cacontents = certs['ca.crt']
+    const cert = certs['server.crt']
+    const key = certs['server.key']
+    await fs.writeFile(cafile, cacontents, 'utf8')
+    const ca = await readCAFile(cafile)
+
+    assert.strictEqual(ca.length, 1)
+
+    const options = { ca, cert, key }
+    const server = https.createServer(options, (req, res) => {
+      assert.strictEqual(req.headers['user-agent'], `node-gyp v42 (node ${process.version})`)
+      res.end('ok')
     })
-  })
-})
 
-test('download over https with custom ca', function (t) {
-  t.plan(3)
+    after(async () => {
+      await new Promise((resolve) => server.close(resolve))
+      await fs.unlink(cafile)
+    })
 
-  var cert = fs.readFileSync(__dirname + '/fixtures/server.crt', 'utf8')
-  var key = fs.readFileSync(__dirname + '/fixtures/server.key', 'utf8')
+    server.on('clientError', (err) => { throw err })
 
-  var cafile = __dirname + '/fixtures/ca.crt'
-  var ca = install.test.readCAFile(cafile)
-  t.strictEqual(ca.length, 1)
-
-  var options = { ca: ca, cert: cert, key: key }
-  var server = https.createServer(options, function (req, res) {
-    t.strictEqual(req.headers['user-agent'],
-                  'node-gyp v42 (node ' + process.version + ')')
-    res.end('ok')
-    server.close()
-  })
-
-  server.on('clientError', function (err) {
-    throw err
-  })
-
-  var host = '127.0.0.1'
-  server.listen(8000, host, function () {
-    var port = this.address().port
-    var gyp = {
-      opts: { cafile: cafile },
-      version: '42',
+    const host = 'localhost'
+    await new Promise((resolve) => server.listen(0, host, resolve))
+    const { port } = server.address()
+    const gyp = {
+      opts: { cafile },
+      version: '42'
     }
-    var url = 'https://' + host + ':' + port
-    var req = install.test.download(gyp, {}, url)
-    req.on('response', function (res) {
-      var body = ''
-      res.setEncoding('utf8')
-      res.on('data', function(data) {
-        body += data
-      })
-      res.on('end', function() {
-        t.strictEqual(body, 'ok')
-      })
-    })
+    const url = `https://${host}:${port}`
+    const res = await download(gyp, url)
+    assert.strictEqual(await res.text(), 'ok')
   })
-})
 
-test('download with missing cafile', function (t) {
-  t.plan(1)
-  var gyp = {
-    opts: { cafile: 'no.such.file' },
-  }
-  try {
-    install.test.download(gyp, {}, 'http://bad/')
-  } catch (e) {
-    t.ok(/no.such.file/.test(e.message))
-  }
-})
+  it('download over http with proxy', async function () {
+    const server = http.createServer((_, res) => {
+      res.end('ok')
+    })
 
-test('check certificate splitting', function (t) {
-  var cas = install.test.readCAFile(__dirname + '/fixtures/ca-bundle.crt')
-  t.plan(2)
-  t.strictEqual(cas.length, 2)
-  t.notStrictEqual(cas[0], cas[1])
+    const pserver = http.createServer((req, res) => {
+      assert.strictEqual(req.headers['user-agent'], `node-gyp v42 (node ${process.version})`)
+      res.end('proxy ok')
+    })
+
+    after(() => Promise.all([
+      new Promise((resolve) => server.close(resolve)),
+      new Promise((resolve) => pserver.close(resolve))
+    ]))
+
+    const host = 'localhost'
+    await new Promise((resolve) => server.listen(0, host, resolve))
+    const { port } = server.address()
+    await new Promise((resolve) => pserver.listen(port + 1, host, resolve))
+    const gyp = {
+      opts: {
+        proxy: `http://${host}:${port + 1}`,
+        noproxy: 'bad'
+      },
+      version: '42'
+    }
+    const url = `http://${host}:${port}`
+    const res = await download(gyp, url)
+    assert.strictEqual(await res.text(), 'proxy ok')
+  })
+
+  it('download over http with noproxy', async function () {
+    const server = http.createServer((req, res) => {
+      assert.strictEqual(req.headers['user-agent'], `node-gyp v42 (node ${process.version})`)
+      res.end('ok')
+    })
+
+    const pserver = http.createServer((_, res) => {
+      res.end('proxy ok')
+    })
+
+    after(() => Promise.all([
+      new Promise((resolve) => server.close(resolve)),
+      new Promise((resolve) => pserver.close(resolve))
+    ]))
+
+    const host = 'localhost'
+    await new Promise((resolve) => server.listen(0, host, resolve))
+    const { port } = server.address()
+    await new Promise((resolve) => pserver.listen(port + 1, host, resolve))
+    const gyp = {
+      opts: {
+        proxy: `http://${host}:${port + 1}`,
+        noproxy: host
+      },
+      version: '42'
+    }
+    const url = `http://${host}:${port}`
+    const res = await download(gyp, url)
+    assert.strictEqual(await res.text(), 'ok')
+  })
+
+  it('download with missing cafile', async function () {
+    const gyp = {
+      opts: { cafile: 'no.such.file' }
+    }
+    try {
+      await download(gyp, {}, 'http://bad/')
+    } catch (e) {
+      assert.ok(/no.such.file/.test(e.message))
+    }
+  })
+
+  it('check certificate splitting', async function () {
+    const cafile = path.join(__dirname, 'fixtures/ca-bundle.crt')
+    const cacontents = certs['ca-bundle.crt']
+    await fs.writeFile(cafile, cacontents, 'utf8')
+    after(async () => {
+      await fs.unlink(cafile)
+    })
+    const cas = await readCAFile(path.join(__dirname, 'fixtures/ca-bundle.crt'))
+    assert.strictEqual(cas.length, 2)
+    assert.notStrictEqual(cas[0], cas[1])
+  })
+
+  // only run this test if we are running a version of Node with predictable version path behavior
+
+  it('download headers (actual)', async function () {
+    if (!FULL_TEST) {
+      return this.skip('Skipping actual download of headers due to test environment configuration')
+    }
+
+    this.timeout(platformTimeout(1, { win32: 5 }))
+
+    const expectedDir = path.join(devDir, process.version.replace(/^v/, ''))
+    await fs.rm(expectedDir, { recursive: true, force: true })
+
+    const prog = gyp()
+    prog.parseArgv([])
+    prog.devDir = devDir
+    await install(prog, [])
+
+    const data = await fs.readFile(path.join(expectedDir, 'installVersion'), 'utf8')
+    assert.strictEqual(data, '11\n', 'correct installVersion')
+
+    const list = await fs.readdir(path.join(expectedDir, 'include/node'))
+    assert.ok(list.includes('common.gypi'))
+    assert.ok(list.includes('config.gypi'))
+    assert.ok(list.includes('node.h'))
+    assert.ok(list.includes('node_version.h'))
+    assert.ok(list.includes('openssl'))
+    assert.ok(list.includes('uv'))
+    assert.ok(list.includes('uv.h'))
+    assert.ok(list.includes('v8-platform.h'))
+    assert.ok(list.includes('v8.h'))
+    assert.ok(list.includes('zlib.h'))
+
+    const lines = (await fs.readFile(path.join(expectedDir, 'include/node/node_version.h'), 'utf8')).split('\n')
+
+    // extract the 3 version parts from the defines to build a valid version string and
+    // and check them against our current env version
+    const version = ['major', 'minor', 'patch'].reduce((version, type) => {
+      const re = new RegExp(`^#define\\sNODE_${type.toUpperCase()}_VERSION`)
+      const line = lines.find((l) => re.test(l))
+      const i = line ? parseInt(line.replace(/^[^0-9]+([0-9]+).*$/, '$1'), 10) : 'ERROR'
+      return `${version}${type !== 'major' ? '.' : 'v'}${i}`
+    }, '')
+
+    assert.strictEqual(version, process.version)
+  })
 })
