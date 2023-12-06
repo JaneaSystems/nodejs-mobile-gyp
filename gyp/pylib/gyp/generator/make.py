@@ -21,6 +21,7 @@
 # toplevel Makefile.  It may make sense to generate some .mk files on
 # the side to keep the files readable.
 
+
 import os
 import re
 import subprocess
@@ -28,8 +29,6 @@ import gyp
 import gyp.common
 import gyp.xcode_emulation
 from gyp.common import GetEnvironFallback
-
-import hashlib
 
 import hashlib
 
@@ -325,25 +324,6 @@ cmd_solink = $(LINK.$(TOOLSET)) $(GYP_LDFLAGS) $(LDFLAGS.$(TOOLSET)) -o $@ $(LD_
 quiet_cmd_solink_module = SOLINK_MODULE($(TOOLSET)) $@
 cmd_solink_module = $(LINK.$(TOOLSET)) $(GYP_LDFLAGS) $(LDFLAGS.$(TOOLSET)) -o $@ $(filter-out FORCE_DO_CMD, $^) $(LIBS)
 """  # noqa: E501
-
-
-LINK_COMMANDS_OS390 = """\
-quiet_cmd_alink = AR($(TOOLSET)) $@
-cmd_alink = rm -f $@ && $(AR.$(TOOLSET)) crs $@ $(filter %.o,$^)
-
-quiet_cmd_alink_thin = AR($(TOOLSET)) $@
-cmd_alink_thin = rm -f $@ && $(AR.$(TOOLSET)) crsT $@ $(filter %.o,$^)
-
-quiet_cmd_link = LINK($(TOOLSET)) $@
-cmd_link = $(LINK.$(TOOLSET)) $(GYP_LDFLAGS) $(LDFLAGS.$(TOOLSET)) -o $@ $(LD_INPUTS) $(LIBS)
-
-quiet_cmd_solink = SOLINK($(TOOLSET)) $@
-cmd_solink = $(LINK.$(TOOLSET)) $(GYP_LDFLAGS) $(LDFLAGS.$(TOOLSET)) -o $@ $(LD_INPUTS) $(LIBS) -Wl,DLL
-
-quiet_cmd_solink_module = SOLINK_MODULE($(TOOLSET)) $@
-cmd_solink_module = $(LINK.$(TOOLSET)) $(GYP_LDFLAGS) $(LDFLAGS.$(TOOLSET)) -o $@ $(filter-out FORCE_DO_CMD, $^) $(LIBS) -Wl,DLL
-
-"""
 
 
 # Header of toplevel Makefile.
@@ -764,10 +744,6 @@ def Sourceify(path):
 
 def QuoteSpaces(s, quote=r"\ "):
     return s.replace(" ", quote)
-
-def SourceifyAndQuoteSpaces(path):
-  """Convert a path to its source directory form and quote spaces."""
-  return QuoteSpaces(Sourceify(path))
 
 def SourceifyAndQuoteSpaces(path):
     """Convert a path to its source directory form and quote spaces."""
