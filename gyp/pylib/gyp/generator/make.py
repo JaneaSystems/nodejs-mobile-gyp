@@ -1595,7 +1595,7 @@ $(obj).$(TOOLSET)/$(TARGET)/%%.o: $(obj)/%%%s FORCE_DO_CMD
     def _InstallImmediately(self):
         return (
             self.toolset == "target"
-            and self.flavor == "mac"
+            and self.flavor in ("mac", "ios")
             and self.type
             in ("static_library", "executable", "shared_library", "loadable_module")
         )
